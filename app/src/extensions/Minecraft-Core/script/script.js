@@ -3,7 +3,7 @@ const onMessageEvents = [];
 const onConnectEvents = [];
 const onDisconnectEvents = [];
 
-console.log(`Connect your Minecraft at: api/vm/${code}`);
+log(`Connect your Minecraft at: api/vm/${code}`);
 
 const events = [
 	"AdditionalContentLoaded",

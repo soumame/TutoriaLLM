@@ -22,7 +22,7 @@ export function code() {
 		// Collect argument strings.
 		const text_text = block.getFieldValue("TEXT");
 
-		const code = `console.log("${text_text}");\n`;
+		const code = `log("${text_text}");\n`;
 
 		// Return code.
 		return code;
