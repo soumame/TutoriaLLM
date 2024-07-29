@@ -1,65 +1,30 @@
-import fs from "node:fs";
 import * as http from "node:http";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import vm, { type Context, type Script } from "node:vm";
+import ivm from "isolated-vm";
 import type { SessionValue, WSMessage } from "../../../../type.js";
 import { sessionDB } from "../../../db/session.js";
-import { ExtensionLoader } from "../extentionLoader.js";
 // `__dirname` を取得
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 // VMのインスタンスを管理するためのインターフェース
 interface VMInstance {
-	context: Context;
-	script: Script | null;
+	isolate: ivm.Isolate;
+	context: ivm.Context;
+	script: ivm.Script | null;
 	running: boolean;
 }
 
 // VMのインスタンスを管理するオブジェクト
 const vmInstances: { [key: string]: VMInstance } = {};
 
-// ログを蓄積するバッファと定期的なDB更新関数
-class LogBuffer {
-	private buffer: string[] = [];
-	private interval: NodeJS.Timeout | null = null;
-
-	constructor(
-		private dbUpdater: (code: string, logs: string[]) => Promise<void>,
-		private code: string,
-	) {}
-
-	start() {
-		if (this.interval) return;
-		this.interval = setInterval(() => this.flush(), 1000);
-	}
-
-	stop() {
-		if (this.interval) {
-			clearInterval(this.interval);
-			this.interval = null;
-		}
-	}
-
-	add(log: string) {
-		this.buffer.push(log);
-	}
-
-	private async flush() {
-		if (this.buffer.length === 0) return;
-		const logsToSave = [...this.buffer];
-		this.buffer = [];
-		try {
-			await this.dbUpdater(this.code, logsToSave);
-		} catch (e) {
-			console.error("Error updating DB with logs:", e);
-		}
-	}
-}
-
 //コンテキストでサーバーを作成するのに使用
 import express, { type Router } from "express";
 import expressWs from "express-ws";
+import { ExtensionLoader } from "../extentionLoader.js";
+import LogBuffer from "./log.js";
+import addContexts from "./contexts.js";
+import addDefaultContexts from "./contexts.js";
 
 export const vmExpress = express.Router();
 expressWs(vmExpress as any);
@@ -105,51 +70,44 @@ export async function ExecCodeTest(
 	}, code);
 
 	// コンテキストの設定
-	const context = vm.createContext({
-		vmExpress,
+	const isolate = new ivm.Isolate({ memoryLimit: 128 });
+	const context = await isolate.createContext();
+	const jail = context.global;
+
+	await addDefaultContexts(
+		jail,
 		code,
 		uuid,
-		console: {
-			log: (...args: string[]) => {
-				const logMessage = args.join(" ");
-				logBuffer.add(logMessage);
-				console.log(`log from VM:${logMessage}`);
-			},
-			error: (...args: string[]) => {
-				const logMessage = args.join(" ");
-				logBuffer.add(logMessage);
-				console.error(`error from VM:${logMessage}`);
-			},
-		},
-		http,
 		serverRootPath,
-	});
+		logBuffer,
+		vmExpress,
+	);
 
-	// 拡張機能をコンテキストに追加
-	const extensionsDir = path.resolve(__dirname, "../../../../extensions");
-	const extensionLoader = new ExtensionLoader(extensionsDir);
-	await extensionLoader.loadExtensions(context);
+	// // 拡張機能をコンテキストに追加
+	// const extensionsDir = path.resolve(__dirname, "../../../../extensions");
+	// const extensionLoader = new ExtensionLoader(extensionsDir, isolate, context);
+	// await extensionLoader.loadExtensions();
 
-	//拡張機能スクリプトをロードする。script.tsファイルのデフォルトエクスポートが拡張機能として使用される
-	const extScript = await extensionLoader.loadScript();
-	console.log("Script to execute: ", extScript, userScript);
-	let script: Script | null = null;
+	// //拡張機能スクリプトをロードする。script.tsファイルのデフォルトエクスポートが拡張機能として使用される
+	// const extScript = await extensionLoader.loadScript(jail);
+	// console.log("Script to execute: ", extScript, userScript);
+	let script: ivm.Script | null = null;
 	try {
-		script = new vm.Script(
-			`
-				${extScript}
-				${userScript}
-			`,
-		);
-		script.runInContext(context);
-	} catch (e) {
+		script = isolate.compileScriptSync(`
+			
+			${userScript}
+		`);
+		await script.run(context);
+	} catch (e: unknown) {
 		console.log("error on VM execution");
+		//エラーをログに追加
+		logBuffer.add(`"VM error: "${(e as string).toString()}`);
 		console.log(e);
 		await StopCodeTest(code, uuid);
 	}
 
-	// VMのインスタンスを保存
-	vmInstances[uuid] = { context, script, running: true };
+	// VMインスタンスの保存
+	vmInstances[uuid] = { isolate, context, script, running: true };
 
 	// ログバッファの処理を開始
 	logBuffer.start();
@@ -164,6 +122,7 @@ export async function StopCodeTest(
 	const instance = vmInstances[uuid];
 	if (instance?.running) {
 		instance.running = false;
+		instance.isolate.dispose();
 		const session = await sessionDB.get(code);
 		if (!session) {
 			return {

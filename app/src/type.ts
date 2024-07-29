@@ -71,8 +71,7 @@ export type WSMinecraftMessage = {
 
 export type AppConfig = {
 	General_Settings: {
-		Enable_Join_by_code: boolean;
-		Enable_Create_Room: boolean;
+		VM_memory_limit_mb: number;
 	};
 	AI_Settings: {
 		Chat_AI_Model: string;

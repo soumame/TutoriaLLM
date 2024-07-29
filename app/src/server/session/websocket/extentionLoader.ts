@@ -1,16 +1,24 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Context } from "node:vm";
+import type ivm from "isolated-vm";
 
 export class ExtensionLoader {
 	private extensionsDir: string;
+	private isolate: ivm.Isolate;
+	private context: ivm.Context;
 
-	constructor(extensionsDir: string) {
+	constructor(
+		extensionsDir: string,
+		isolate: ivm.Isolate,
+		context: ivm.Context,
+	) {
 		this.extensionsDir = extensionsDir;
+		this.isolate = isolate;
+		this.context = context;
 	}
 
-	public async loadExtensions(context: Context): Promise<void> {
+	public async loadExtensions(): Promise<void> {
 		const extensionFolders = fs.readdirSync(this.extensionsDir);
 
 		for (const extensionFolder of extensionFolders) {
@@ -23,14 +31,15 @@ export class ExtensionLoader {
 					const mod = await import(fileURL);
 					if (typeof mod.default === "function") {
 						console.log("loading extension", file);
-						context[path.basename(file, path.extname(file))] = mod.default;
+						const script = `global.${path.basename(file, path.extname(file))} = ${mod.default.toString()};`;
+						await this.context.eval(script, { filename: file });
 					}
 				}
 			}
 		}
 	}
 
-	public async loadScript(): Promise<string | null> {
+	public async loadScript(globals: { [key: string]: any }): Promise<string> {
 		function findScriptFiles(dir: string): string[] {
 			let results: string[] = [];
 			const list = fs.readdirSync(dir);
@@ -49,12 +58,25 @@ export class ExtensionLoader {
 
 		const scriptFiles = findScriptFiles(this.extensionsDir);
 		let ExtscriptContent = "";
+
+		// グローバル変数の定義を追加
+		for (const [key, value] of Object.entries(globals)) {
+			ExtscriptContent += `const ${key} = ${JSON.stringify(value)};\n`;
+		}
+
 		for (const scriptFile of scriptFiles) {
 			const scriptContent = fs.readFileSync(scriptFile, "utf-8");
-			// Optionally, add a check here to ensure the content contains a default function export
 			console.log("loading extension script", scriptFile);
 			ExtscriptContent += scriptContent;
 		}
+
+		try {
+			await this.context.eval(ExtscriptContent, { filename: "loaded-scripts" });
+		} catch (error) {
+			console.error("Error evaluating extension scripts:", error);
+			throw error;
+		}
+
 		return ExtscriptContent;
 	}
 }
