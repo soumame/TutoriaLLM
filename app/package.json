@@ -4,8 +4,8 @@
 	"version": "0.0.0",
 	"type": "module",
 	"scripts": {
-		"dev": "nodemon -w src/server -x tsx src/server/main.ts",
-		"start": "NODE_ENV=production tsx src/server/main.ts",
+		"dev": "nodemon -w src/server -x tsx --no-node-snapshot src/server/main.ts",
+		"start": "NODE_ENV=production tsx --no-node-snapshot src/server/main.ts",
 		"build": "vite build",
 		"check": "biome check --apply --max-diagnostics=50 .",
 		"drizzle:generate": "drizzle-kit generate --config=drizzle.config.ts",
@@ -44,6 +44,7 @@
 		"i18next": "^23.11.5",
 		"i18next-fs-backend": "^2.3.1",
 		"input-otp": "^1.2.4",
+		"isolated-vm": "^5.0.1",
 		"jotai": "^2.8.2",
 		"js-yaml": "^4.1.0",
 		"kysely": "^0.27.3",
