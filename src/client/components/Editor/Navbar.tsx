@@ -36,9 +36,11 @@ export default function Navbar(props: {
 	const { setIsOpen } = useTour(); // ツアーの開始/終了を管理するフック
 
 	return (
-		<div className="navbar flex-col sm:flex-row shrink w-full p-2 md:p-4 bg-gray-200 border-b-2 border-gray-300 text-gray-800 z-50 flex gap-2">
-			<div className="flex flex-row justify-between gap-4">
-				<ExitButton text={t("navbar.saveAndLeave")} onClick={handleExit} />
+		<div className="navbar flex-col sm:flex-row justify-center shrink w-full p-2 md:p-4 bg-gray-200 border-b-2 border-gray-300 text-gray-800 z-50 flex gap-2">
+			<div className="flex flex-row justify-between items-center gap-4">
+				{props.isConnected ? (
+					<ExitButton text={t("navbar.saveAndLeave")} onClick={handleExit} />
+				) : null}
 
 				<div className="flex justify-center items-center gap-2">
 					<span className="text-xs joinCode">
@@ -46,16 +48,13 @@ export default function Navbar(props: {
 						<p className="font-semibold text-base md:text-xl tracking-widest">
 							{props.code}
 						</p>
-						{props.isConnected ? null : (
-							<p className="p-0.5 px-2 rounded-full bg-red-300 flex flex-nowrap">
-								{t("navbar.reconnecting")}
-							</p>
-						)}
 					</span>
 				</div>
 			</div>
 			<hr className="border border-gray-300 h-full" />
-			<div className="flex flex-row gap-2 justify-between items-center w-full">
+			<div
+				className={`flex flex-row gap-2 justify-between items-center${props.isConnected ? " w-full" : ""}`}
+			>
 				<span className="text-xs flex w-fit h-fit">
 					{props.isTutorial && typeof props.tutorialProgress === "number" ? (
 						<div className="p-2">
@@ -74,22 +73,26 @@ export default function Navbar(props: {
 							<p className="text-base">{props.tutorialProgress}%</p>
 						</div>
 					) : (
-						<p className="px-2 py-1.5 rounded-full bg-red-300 w-full line-clamp-2">
-							{t("navbar.noTutorial")}
+						<p className="p-2 rounded-lg bg-red-300 w-full line-clamp-2">
+							{props.isConnected
+								? t("navbar.noTutorial")
+								: t("navbar.reconnecting")}
 						</p>
 					)}
 				</span>
-				<span className="flex gap-1.5 justify-center items-center">
-					<button
-						type="button"
-						onClick={() => setIsOpen(true)} // ツアーを開始する
-						className="bg-gray-300 group text-gray-500 flex justify-center items-center text-sm max-w-sm rounded-2xl p-1.5 md:p-4 hover:text-gray-200 gap-2 transition-all startTour"
-					>
-						<HelpCircle className="group-hover:text" />
-					</button>
-					<span className="border border-gray-300 h-4 md:h-8" />
-					<ExecSwitch />
-				</span>
+				{props.isConnected ? (
+					<span className="flex gap-1.5 justify-center items-center">
+						<button
+							type="button"
+							onClick={() => setIsOpen(true)} // ツアーを開始する
+							className="bg-gray-300 group text-gray-500 flex justify-center items-center text-sm max-w-sm rounded-2xl p-1.5 md:p-2 hover:text-gray-200 gap-2 transition-all startTour"
+						>
+							<HelpCircle className="group-hover:text" />
+						</button>
+						<span className="border border-gray-300 h-4 md:h-8" />
+						<ExecSwitch />
+					</span>
+				) : null}
 			</div>
 		</div>
 	);
